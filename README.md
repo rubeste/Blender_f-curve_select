@@ -14,3 +14,5 @@ This is still a work in progress add-on and does not work properly yet. Expect b
 
 ## Usage
 To use the addon press the ctrl button with the selection button and drag over the curve(s) you want to select.
+
+![Showcase gif](https://github.com/rubeste/Blender_f-curve_select/blob/master/showcase.gif)
