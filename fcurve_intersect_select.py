@@ -1,15 +1,19 @@
 import bpy
+import numpy as np
+import logging
 
 bl_info = {
     "name":        "Graph Select Tool",
     "description": "Tool to select an f-curve by box selecting the f-curve itself.",
     "author":      "Ruben van Osch",
-    "version":     (0, 1, 0),
+    "version":     (0, 2, 0),
     "blender":     (2, 80, 0),
     "location":    "Animation Graph",
     "category":    "Graph",
     "warning":     "This version is still in development."
 }
+
+log = logging.getLogger(__name__)
 
 
 class BoxSelectHandlesOperator(bpy.types.Operator):
@@ -108,8 +112,7 @@ class BoxSelectHandlesOperator(bpy.types.Operator):
         fCurves = self.removeHidden(
             context.object.animation_data.action.fcurves)
         # Get intersected curves
-        fCurves = self.getIntersectingCurves(
-            fCurves, minFrame, maxFrame, minValue, maxValue)
+        fCurves = self.getIntersectingCurves(context, fCurves, minFrame, maxFrame, minValue, maxValue)
         # Select curves
         self.selectCurves(fCurves)
         return {'FINISHED'}
@@ -123,10 +126,10 @@ class BoxSelectHandlesOperator(bpy.types.Operator):
         return result
 
     # gets all intersecting curves
-    def getIntersectingCurves(self, fCurves, minFrame, maxFrame, minValue, maxValue):
+    def getIntersectingCurves(self, context, fCurves, minFrame, maxFrame, minValue, maxValue):
         result = []
         for f in fCurves:
-            if self.doesCurveintersect(minValue, maxValue, self.calculateValuesOfCurve(f, minFrame, maxFrame)):
+            if self.doesCurveintersect(minValue, maxValue, self.calculateValuesOfCurve(context, f, minFrame, maxFrame)):
                 result.append(f)
         return result
 
@@ -137,14 +140,35 @@ class BoxSelectHandlesOperator(bpy.types.Operator):
                 return True
         return False
 
-    # Calculates all curve values within the selected frames
-    def calculateValuesOfCurve(self, fCurve, minFrame, maxFrame):
+    # Calculates all curve values within the selected frames with .1 frame interval precision
+    def calculateValuesOfCurve(self, context, fCurve, minFrame, maxFrame):
         result = []
         i = minFrame
         while i <= maxFrame:
-            result.append(fCurve.evaluate(i))
+            result.append(self.calculateValueOfCurve(context, fCurve, i))
             i += 0.1
         return result
+    
+    # Calculates value of curve at frame.
+    def calculateValueOfCurve(self, context, fCurve, frame):
+        if context.space_data.use_normalization:
+            return self.calculateValeOfNormalizedCurve(context, fCurve, frame)
+        return fCurve.evaluate(frame)
+
+    # Gets normalized value of curve with .1 frame interval precision.
+    def calculateValeOfNormalizedCurve(self, context, fCurve, frame):
+        start = context.scene.frame_start
+        end = context.scene.frame_end
+        values = []
+        value = fCurve.evaluate(frame)
+        i = start
+        while i <= end:
+            values.append(fCurve.evaluate(i))
+            i += 0.1
+        max = np.max(values)
+        min = np.min(values)
+        tmp = ((value-min)/(max-min)*2)-1
+        return tmp
 
     # Selects all curves in a collection
     def selectCurves(self, fCurves):
@@ -160,7 +184,6 @@ class BoxSelectHandlesOperator(bpy.types.Operator):
 # Register Addon
 keymap = None
 
-
 def register():
     global keymap
 
@@ -173,17 +196,17 @@ def register():
         name='Graph Editor', space_type='GRAPH_EDITOR'
     )
     kmi = keymap.keymap_items.new(
-        BoxSelectHandlesOperator.bl_idname, 'LEFTMOUSE', 'PRESS', ctrl=True
+        BoxSelectHandlesOperator.bl_idname, 'LEFTMOUSE', 'PRESS', alt=True
     )
     kmi.properties.wait_for_input = False
     kmi.properties.extend = False
     kmi = keymap.keymap_items.new(
-        BoxSelectHandlesOperator.bl_idname, 'RIGHTMOUSE', 'PRESS', ctrl=True
+        BoxSelectHandlesOperator.bl_idname, 'RIGHTMOUSE', 'PRESS', alt=True
     )
     kmi.properties.wait_for_input = False
     kmi.properties.extend = False
     kmi = keymap.keymap_items.new(
-        BoxSelectHandlesOperator.bl_idname, 'B', 'PRESS', ctrl=True
+        BoxSelectHandlesOperator.bl_idname, 'B', 'PRESS', alt=True
     )
     kmi.properties.wait_for_input = True
     kmi.properties.extend = True
