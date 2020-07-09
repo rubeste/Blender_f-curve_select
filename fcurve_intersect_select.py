@@ -10,6 +10,8 @@ bl_info = {
     "blender":     (2, 80, 0),
     "location":    "Animation Graph",
     "category":    "Graph",
+    "wiki_url": "https://github.com/rubeste/Blender_f-curve_select",
+    "tracker_url": "https://github.com/rubeste/Blender_f-curve_select/issues",
     "warning":     "This version is still in development."
 }
 
