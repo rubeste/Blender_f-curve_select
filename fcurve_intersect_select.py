@@ -6,11 +6,11 @@ bl_info = {
     "name":        "Graph Select Tool",
     "description": "Tool to select an f-curve by box selecting the f-curve itself.",
     "author":      "Ruben van Osch",
-    "version":     (0, 2, 0),
+    "version":     (0, 3, 0),
     "blender":     (2, 80, 0),
     "location":    "Animation Graph",
     "category":    "Graph",
-    "wiki_url": "https://github.com/rubeste/Blender_f-curve_select",
+    "wiki_url":    "https://github.com/rubeste/Blender_f-curve_select",
     "tracker_url": "https://github.com/rubeste/Blender_f-curve_select/issues",
     "warning":     "This version is still in development."
 }
@@ -63,7 +63,7 @@ class BoxSelectHandlesOperator(bpy.types.Operator):
                 event.mouse_region_x, event.mouse_region_y)
 
         # Start modal execution
-        #bpy.ops.sequencer.view_ghost_border(
+        # bpy.ops.sequencer.view_ghost_border(
         #    'INVOKE_DEFAULT', wait_for_input=self.wait_for_input)
         context.window_manager.modal_handler_add(self)
         self._select = True
@@ -110,11 +110,18 @@ class BoxSelectHandlesOperator(bpy.types.Operator):
         maxValue = max(self._mouse_start[1], self._mouse_end[1])
         minFrame = min(self._mouse_start[0], self._mouse_end[0])
         maxFrame = max(self._mouse_start[0], self._mouse_end[0])
+        if minValue == maxValue:
+            maxValue += 0.1
+            minValue -= 0.1
+        if minFrame == maxFrame:
+            maxFrame += 0.1
+            minFrame -= 0.1
         # Remove Hidden curves
         fCurves = self.removeHidden(
             context.object.animation_data.action.fcurves)
         # Get intersected curves
-        fCurves = self.getIntersectingCurves(context, fCurves, minFrame, maxFrame, minValue, maxValue)
+        fCurves = self.getIntersectingCurves(
+            context, fCurves, minFrame, maxFrame, minValue, maxValue)
         # Select curves
         self.selectCurves(fCurves)
         return {'FINISHED'}
@@ -131,46 +138,86 @@ class BoxSelectHandlesOperator(bpy.types.Operator):
     def getIntersectingCurves(self, context, fCurves, minFrame, maxFrame, minValue, maxValue):
         result = []
         for f in fCurves:
-            if self.doesCurveintersect(minValue, maxValue, self.calculateValuesOfCurve(context, f, minFrame, maxFrame)):
+            if self.doesCurveIntersect(context, minFrame, maxFrame, minValue, maxValue, f):
                 result.append(f)
         return result
 
-    # Checks if curve intersects
-    def doesCurveintersect(self, minValue, maxValue, values):
-        for v in values:
-            if minValue <= v and v <= maxValue:
+    def doesCurveIntersect(self, context, minFrame, maxFrame, minValue, maxValue, fCurve):
+        i = minFrame
+        while i < maxFrame:
+            if self.doesValueIntersect(minValue, maxValue, self.calculateValueOfCurve(context, fCurve, i)):
                 return True
+            i += 0.1
         return False
 
-    # Calculates all curve values within the selected frames with .1 frame interval precision
-    def calculateValuesOfCurve(self, context, fCurve, minFrame, maxFrame):
-        result = []
-        i = minFrame
-        while i <= maxFrame:
-            result.append(self.calculateValueOfCurve(context, fCurve, i))
-            i += 0.1
-        return result
-    
+    # Checks if value intersects
+    def doesValueIntersect(self, minValue, maxValue, value):
+        if minValue <= value and value <= maxValue:
+            return True
+        return False
+
     # Calculates value of curve at frame.
     def calculateValueOfCurve(self, context, fCurve, frame):
         if context.space_data.use_normalization:
-            return self.calculateValeOfNormalizedCurve(context, fCurve, frame)
+            return self.calculateValeOfNormalizedCurve(fCurve, frame)
         return fCurve.evaluate(frame)
 
     # Gets normalized value of curve with .1 frame interval precision.
-    def calculateValeOfNormalizedCurve(self, context, fCurve, frame):
-        start = context.scene.frame_start
-        end = context.scene.frame_end
-        values = []
+    def calculateValeOfNormalizedCurve(self, fCurve, frame):
         value = fCurve.evaluate(frame)
-        i = start
-        while i <= end:
-            values.append(fCurve.evaluate(i))
-            i += 0.1
-        max = np.max(values)
-        min = np.min(values)
-        tmp = ((value-min)/(max-min)*2)-1
-        return tmp
+        min = self.calculateMinValue(fCurve)
+        max = self.calculateMaxValue(fCurve)
+        return ((value-min)/(max-min)*2)-1
+
+    def calculateMaxValue(self, fCurve):
+        maxFrame = None
+        max = None
+        for k in fCurve.keyframe_points:
+            if max is None or max < k.co.y:
+                maxFrame = k.co.x
+                max = k.co.y
+        if max < fCurve.evaluate(maxFrame - 0.1):
+            i = maxFrame
+            while True:
+                if max < fCurve.evaluate(i):
+                    max = fCurve.evaluate(i)
+                elif max >= fCurve.evaluate(i):
+                    break
+                i -= 0.1
+        elif max < fCurve.evaluate(maxFrame + 0.1):
+            i = maxFrame
+            while True:
+                if max < fCurve.evaluate(i):
+                    max = fCurve.evaluate(i)
+                elif max >= fCurve.evaluate(i):
+                    break
+                i += 0.1
+        return max
+
+    def calculateMinValue(self, fCurve):
+        minFrame = None
+        min = None
+        for k in fCurve.keyframe_points:
+            if min is None or min > k.co.y:
+                minFrame = k.co.x
+                min = k.co.y
+        if min > fCurve.evaluate(minFrame - 0.1):
+            i = minFrame
+            while True:
+                if min > fCurve.evaluate(i):
+                    min = fCurve.evaluate(i)
+                elif min <= fCurve.evaluate(i):
+                    break
+                i -= 0.1
+        elif min > fCurve.evaluate(minFrame + 0.1):
+            i = minFrame
+            while True:
+                if min > fCurve.evaluate(i):
+                    min = fCurve.evaluate(i)
+                elif min <= fCurve.evaluate(i):
+                    break
+                i += 0.1
+        return min
 
     # Selects all curves in a collection
     def selectCurves(self, fCurves):
@@ -185,6 +232,7 @@ class BoxSelectHandlesOperator(bpy.types.Operator):
 
 # Register Addon
 keymap = None
+
 
 def register():
     global keymap
